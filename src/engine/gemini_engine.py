@@ -1,5 +1,5 @@
 """
-Gemini AI Synthesis Engine for Wise Daily Brief
+Gemini AI Synthesis Engine for Daily Brief
 
 Uses Google GenAI SDK (or REST API) with JSON Schema to transform raw feeds
 from Slack, Jira, and GitHub into an executive daily brief.
@@ -95,7 +95,7 @@ class GeminiBriefEngine:
         Synthesizes Slack, Jira, and GitHub feeds into a structured daily brief object.
         """
         prompt = f"""
-You are Wise, an AI chief of staff. 
+You are Daily Brief AI, an executive assistant. 
 Synthesize these 3 workspace feeds into a high-impact Daily Brief for a software engineer:
 
 1. SLACK CONVERSATIONS:
@@ -114,7 +114,7 @@ Synthesize rules:
 - Extract cross-team updates and pre-prod blockers.
 """
 
-        if GENAI_AVAILABLE and self.api_key:
+        if GENAI_AVAILABLE and self.api_key and not self.api_key.startswith("AIzaSy..."):
             try:
                 client = genai.Client(api_key=self.api_key)
                 response = client.models.generate_content(
@@ -127,28 +127,29 @@ Synthesize rules:
                 )
                 return json.loads(response.text)
             except Exception as e:
-                print(f"GenAI SDK error: {e}. Falling back to REST API...")
+                print(f"GenAI SDK notice: {e}. Trying REST endpoint...")
 
-        if self.api_key:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "responseMimeType": "application/json"
+        if self.api_key and not self.api_key.startswith("AIzaSy..."):
+            for model_name in ["gemini-2.5-flash", "gemini-1.5-flash"]:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "responseMimeType": "application/json"
+                        }
                     }
-                }
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req) as resp:
-                    res_json = json.loads(resp.read().decode("utf-8"))
-                    text_content = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    return json.loads(text_content)
-            except Exception as e:
-                print(f"REST API error: {e}. Returning synthesized fallback...")
+                    req = urllib.request.Request(
+                        url,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with urllib.request.urlopen(req) as resp:
+                        res_json = json.loads(resp.read().decode("utf-8"))
+                        text_content = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        return json.loads(text_content)
+                except Exception as e:
+                    pass
 
         return self._get_fallback_synthesized_brief()
 

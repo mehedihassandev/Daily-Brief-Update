@@ -1,11 +1,8 @@
 """
 HTTP API Server for Daily Brief Project
 
-Serves the Web Dashboard UI and REST API endpoints:
-- GET /               -> Web Dashboard UI
-- GET /api/status     -> Check integration connection states & domain config
-- POST /api/brief     -> Generate Daily Brief with Gemini
-- POST /api/settings   -> Save API keys/tokens
+Ensures ALL integration settings (Slack, Jira, GitHub, Gemini) are dynamically
+loaded directly from the .env environment file.
 """
 
 import json
@@ -24,7 +21,7 @@ from src.engine.gemini_engine import GeminiBriefEngine
 
 
 def load_env_file():
-    """Helper to auto-load key=value lines from .env file into os.environ if present."""
+    """Helper to auto-load key=value lines from .env file into os.environ."""
     env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
@@ -35,17 +32,18 @@ def load_env_file():
                     v = v.strip().strip('"').strip("'")
                     os.environ[k.strip()] = v
 
-load_env_file()
 
-# In-Memory Configuration Store
-APP_CONFIG = {
-    "slack_token": os.environ.get("SLACK_BOT_TOKEN", ""),
-    "jira_domain": os.environ.get("JIRA_DOMAIN", "exos-systems.atlassian.net"),
-    "jira_email": os.environ.get("JIRA_EMAIL", ""),
-    "jira_token": os.environ.get("JIRA_API_TOKEN", ""),
-    "github_token": os.environ.get("GITHUB_PAT", ""),
-    "gemini_key": os.environ.get("GEMINI_API_KEY", "")
-}
+def get_current_env_config():
+    """Always fetch the latest environment configuration directly from os.environ."""
+    load_env_file()
+    return {
+        "slack_token": os.environ.get("SLACK_BOT_TOKEN", "").strip(),
+        "jira_domain": os.environ.get("JIRA_DOMAIN", "exos-systems.atlassian.net").strip(),
+        "jira_email": os.environ.get("JIRA_EMAIL", "").strip(),
+        "jira_token": os.environ.get("JIRA_API_TOKEN", "").strip(),
+        "github_token": os.environ.get("GITHUB_PAT", "").strip(),
+        "gemini_key": os.environ.get("GEMINI_API_KEY", "").strip()
+    }
 
 
 class DailyBriefRequestHandler(BaseHTTPRequestHandler):
@@ -63,6 +61,7 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        config = get_current_env_config()
 
         if path in ["/", "/index.html"]:
             web_file = os.path.join(os.path.dirname(__file__), "../web/index.html")
@@ -77,17 +76,18 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/status":
             status = {
-                "slack": bool(APP_CONFIG["slack_token"]),
-                "jira": bool(APP_CONFIG["jira_domain"] and APP_CONFIG["jira_token"]),
-                "github": bool(APP_CONFIG["github_token"]),
-                "gemini": bool(APP_CONFIG["gemini_key"]),
-                "jira_domain": APP_CONFIG["jira_domain"] or "exos-systems.atlassian.net"
+                "slack": bool(config["slack_token"]),
+                "jira": bool(config["jira_domain"] and config["jira_token"]),
+                "github": bool(config["github_token"]),
+                "gemini": bool(config["gemini_key"]),
+                "jira_domain": config["jira_domain"],
+                "jira_email": config["jira_email"]
             }
             self._set_headers(200)
             self.wfile.write(json.dumps(status).encode("utf-8"))
 
         elif path == "/api/brief":
-            brief = self._generate_brief()
+            brief = self._generate_brief(config)
             self._set_headers(200)
             self.wfile.write(json.dumps(brief).encode("utf-8"))
 
@@ -98,29 +98,37 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        config = get_current_env_config()
         content_len = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
 
         if path == "/api/brief":
             req_data = json.loads(body) if body else {}
-            api_key = req_data.get("gemini_key") or APP_CONFIG["gemini_key"]
-            brief = self._generate_brief(api_key=api_key)
+            brief = self._generate_brief(config, request_gemini_key=req_data.get("gemini_key"))
             self._set_headers(200)
             self.wfile.write(json.dumps(brief).encode("utf-8"))
 
         elif path == "/api/settings":
             try:
                 data = json.loads(body)
-                APP_CONFIG.update({
-                    "slack_token": data.get("slack_token", APP_CONFIG["slack_token"]),
-                    "jira_domain": data.get("jira_domain", APP_CONFIG["jira_domain"]),
-                    "jira_email": data.get("jira_email", APP_CONFIG["jira_email"]),
-                    "jira_token": data.get("jira_token", APP_CONFIG["jira_token"]),
-                    "github_token": data.get("github_token", APP_CONFIG["github_token"]),
-                    "gemini_key": data.get("gemini_key", APP_CONFIG["gemini_key"])
-                })
+                # Write updated settings directly back into .env file!
+                env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
+                new_env_lines = [
+                    f"GEMINI_API_KEY={data.get('gemini_key', config['gemini_key'])}\n",
+                    f"SLACK_BOT_TOKEN={data.get('slack_token', config['slack_token'])}\n",
+                    f"JIRA_DOMAIN={data.get('jira_domain', config['jira_domain'])}\n",
+                    f"JIRA_EMAIL={data.get('jira_email', config['jira_email'])}\n",
+                    f"JIRA_API_TOKEN={data.get('jira_token', config['jira_token'])}\n",
+                    f"GITHUB_PAT={data.get('github_token', config['github_token'])}\n"
+                ]
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.writelines(new_env_lines)
+
+                # Re-load environment
+                load_env_file()
+
                 self._set_headers(200)
-                self.wfile.write(json.dumps({"success": True, "message": "Settings updated successfully"}).encode("utf-8"))
+                self.wfile.write(json.dumps({"success": True, "message": "Settings updated in .env successfully"}).encode("utf-8"))
             except Exception as e:
                 self._set_headers(400)
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
@@ -129,17 +137,17 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
             self._set_headers(404)
             self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode("utf-8"))
 
-    def _generate_brief(self, api_key: str = None) -> dict:
-        slack_client = SlackConnector(bot_token=APP_CONFIG["slack_token"])
+    def _generate_brief(self, config: dict, request_gemini_key: str = None) -> dict:
+        slack_client = SlackConnector(bot_token=config["slack_token"])
         jira_client = JiraConnector(
-            domain=APP_CONFIG["jira_domain"],
-            email=APP_CONFIG["jira_email"],
-            api_token=APP_CONFIG["jira_token"]
+            domain=config["jira_domain"],
+            email=config["jira_email"],
+            api_token=config["jira_token"]
         )
         github_client = GitHubConnector(
-            pat_token=APP_CONFIG["github_token"]
+            pat_token=config["github_token"]
         )
-        engine = GeminiBriefEngine(api_key=api_key or APP_CONFIG["gemini_key"])
+        engine = GeminiBriefEngine(api_key=request_gemini_key or config["gemini_key"])
 
         slack_feed = slack_client.fetch_recent_channel_messages()
         jira_feed = jira_client.fetch_assigned_issues()

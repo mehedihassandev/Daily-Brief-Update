@@ -15,8 +15,7 @@ import os
 # Add root directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from src.server.app import load_env_file, run_server, APP_CONFIG
-load_env_file()
+from src.server.app import load_env_file, get_current_env_config, run_server
 
 from src.integrations.slack_connector import SlackConnector
 from src.integrations.jira_connector import JiraConnector
@@ -31,20 +30,21 @@ def main():
     parser.add_argument("--port", type=int, default=8090, help="Port for Web Server (default: 8090)")
     args = parser.parse_args()
 
-    # If --port is provided or no flags given, default to server mode
     if args.server or "--port" in sys.argv or (not args.generate and len(sys.argv) <= 3):
         run_server(port=args.port)
 
     elif args.generate:
-        print("🔍 Fetching workspace data streams from Slack, Jira, and GitHub...")
-        slack_client = SlackConnector(bot_token=APP_CONFIG["slack_token"])
+        config = get_current_env_config()
+        print(f"🔍 Fetching workspace streams (.env config: Jira Domain={config['jira_domain']})...")
+        
+        slack_client = SlackConnector(bot_token=config["slack_token"])
         jira_client = JiraConnector(
-            domain=APP_CONFIG["jira_domain"],
-            email=APP_CONFIG["jira_email"],
-            api_token=APP_CONFIG["jira_token"]
+            domain=config["jira_domain"],
+            email=config["jira_email"],
+            api_token=config["jira_token"]
         )
-        github_client = GitHubConnector(pat_token=APP_CONFIG["github_token"])
-        engine = GeminiBriefEngine(api_key=APP_CONFIG["gemini_key"])
+        github_client = GitHubConnector(pat_token=config["github_token"])
+        engine = GeminiBriefEngine(api_key=config["gemini_key"])
 
         slack_feed = slack_client.fetch_recent_channel_messages()
         jira_feed = jira_client.fetch_assigned_issues()
