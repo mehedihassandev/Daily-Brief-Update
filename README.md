@@ -1,33 +1,40 @@
 # Daily Brief Update 🌅
 
 Automated AI Daily Work Brief generator powered by **Gemini AI**, **Slack**, **Jira / Atlassian**, and **GitHub**.
+Built with a **Python Backend** and a **React Frontend (Yarn + Vite)**.
 
-![Daily Brief UI Layout](src/web/index.html)
-
-## Features
-- **Editorial UI Design**: "The Monday Brief" layout with dark mode, rotated side metadata axes (`DATE` / `TIME`), starburst action badges (*"Let's do it →"*), and calendar schedule.
-- **Slack Integration**: Scans recent channel discussions, threads, and direct `@mentions`.
-- **Jira Integration**: Queries pending assigned tasks (`In Progress`, `To Do`, `Open`) and sprint blockers.
-- **GitHub Integration**: Ingests open & merged Pull Requests, code review requests, and commit updates.
-- **Gemini AI Synthesis**: Generates structured daily briefs using Gemini 2.5 / 3.0 Flash with JSON Schema.
+## Project Structure
+- `backend/`: Python REST API & Gemini AI Synthesis Engine
+- `frontend/`: React + Vite Single Page Application (Yarn)
+- `start.sh` / `start.py`: Single command launcher for Backend & Frontend
 
 ## Quick Start
 
-### 1. Run Web Dashboard
+### 1. Launch Both Backend & Frontend (1 Command)
 ```bash
 cd ~/Desktop/daily-brief
-python3 main.py
+./start.sh
+# or python3 start.py
 ```
-Open **[http://localhost:8090](http://localhost:8090)** in your browser.
+Open **[http://localhost:3000](http://localhost:3000)** for live React UI.
 
-### 2. Run Terminal CLI Digest
+### 2. React Frontend Development (Yarn)
 ```bash
+cd ~/Desktop/daily-brief/frontend
+yarn install
+yarn dev
+```
+
+### 3. Build Production Bundle (Yarn)
+```bash
+cd ~/Desktop/daily-brief/frontend
+yarn build
+```
+
+### 4. Terminal CLI Digest
+```bash
+cd ~/Desktop/daily-brief/backend
 python3 cli.py --generate
-```
-
-### 3. Run Unit Tests
-```bash
-python3 -m unittest discover tests
 ```
 
 ## Environment Configuration

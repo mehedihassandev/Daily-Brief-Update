@@ -1,8 +1,9 @@
 """
-HTTP API Server for Daily Brief Project
+Python REST API Backend for Daily Brief Project
 
-Ensures ALL configuration settings are loaded 100% dynamically from environment variables / .env.
-NO hardcoded fallback domains, emails, or tokens are used anywhere.
+Serves:
+- React Single Page Application (from frontend/dist or frontend/index.html)
+- REST API Endpoints (/api/status, /api/brief, /api/settings)
 """
 
 import json
@@ -11,18 +12,17 @@ import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-# Add src parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from src.integrations.slack_connector import SlackConnector
-from src.integrations.jira_connector import JiraConnector
-from src.integrations.github_connector import GitHubConnector
-from src.engine.gemini_engine import GeminiBriefEngine
+from integrations.slack_connector import SlackConnector
+from integrations.jira_connector import JiraConnector
+from integrations.github_connector import GitHubConnector
+from engine.gemini_engine import GeminiBriefEngine
 
 
 def load_env_file():
     """Helper to auto-load key=value lines from .env file into os.environ."""
-    env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
+    env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.env"))
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -34,7 +34,7 @@ def load_env_file():
 
 
 def get_current_env_config():
-    """Fetch all integration parameters exclusively from environment variables."""
+    """Fetch all parameters dynamically from environment variables."""
     load_env_file()
     return {
         "slack_token": os.environ.get("SLACK_BOT_TOKEN", "").strip(),
@@ -46,7 +46,7 @@ def get_current_env_config():
     }
 
 
-class DailyBriefRequestHandler(BaseHTTPRequestHandler):
+class BackendRequestHandler(BaseHTTPRequestHandler):
     def _set_headers(self, status=200, content_type="application/json"):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -63,18 +63,7 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
         config = get_current_env_config()
 
-        if path in ["/", "/index.html"]:
-            web_file = os.path.join(os.path.dirname(__file__), "../web/index.html")
-            if os.path.exists(web_file):
-                with open(web_file, "r", encoding="utf-8") as f:
-                    content = f.read()
-                self._set_headers(200, "text/html; charset=utf-8")
-                self.wfile.write(content.encode("utf-8"))
-            else:
-                self._set_headers(404, "text/plain")
-                self.wfile.write(b"404 Not Found")
-
-        elif path == "/api/status":
+        if path == "/api/status":
             status = {
                 "slack": bool(config["slack_token"]),
                 "jira": bool(config["jira_domain"] and config["jira_token"]),
@@ -92,8 +81,32 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(brief).encode("utf-8"))
 
         else:
-            self._set_headers(404)
-            self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode("utf-8"))
+            # Serve React Production Build Files (frontend/dist)
+            dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
+            rel_file = path.lstrip("/") or "index.html"
+            file_path = os.path.join(dist_dir, rel_file)
+
+            if not os.path.exists(file_path):
+                file_path = os.path.join(dist_dir, "index.html")
+
+            if os.path.exists(file_path):
+                mime = "text/html; charset=utf-8"
+                if file_path.endswith(".js"):
+                    mime = "application/javascript"
+                elif file_path.endswith(".css"):
+                    mime = "text/css"
+                elif file_path.endswith(".json"):
+                    mime = "application/json"
+                elif file_path.endswith(".svg"):
+                    mime = "image/svg+xml"
+
+                with open(file_path, "rb") as f:
+                    content = f.read()
+                self._set_headers(200, mime)
+                self.wfile.write(content)
+            else:
+                self._set_headers(404)
+                self.wfile.write(b"404 Not Found")
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -111,7 +124,7 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/settings":
             try:
                 data = json.loads(body)
-                env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
+                env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.env"))
                 new_env_lines = [
                     f"GEMINI_API_KEY={data.get('gemini_key', config['gemini_key'])}\n",
                     f"SLACK_BOT_TOKEN={data.get('slack_token', config['slack_token'])}\n",
@@ -124,9 +137,8 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
                     f.writelines(new_env_lines)
 
                 load_env_file()
-
                 self._set_headers(200)
-                self.wfile.write(json.dumps({"success": True, "message": "Settings saved to .env"}).encode("utf-8"))
+                self.wfile.write(json.dumps({"success": True, "message": "Saved to .env"}).encode("utf-8"))
             except Exception as e:
                 self._set_headers(400)
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
@@ -142,9 +154,7 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
             email=config["jira_email"],
             api_token=config["jira_token"]
         )
-        github_client = GitHubConnector(
-            pat_token=config["github_token"]
-        )
+        github_client = GitHubConnector(pat_token=config["github_token"])
         engine = GeminiBriefEngine(api_key=request_gemini_key or config["gemini_key"])
 
         slack_feed = slack_client.fetch_recent_channel_messages()
@@ -154,13 +164,13 @@ class DailyBriefRequestHandler(BaseHTTPRequestHandler):
         return engine.synthesize_brief(slack_feed, jira_feed, github_feed)
 
 
-def run_server(port=8090):
+def run_backend_server(port=8090):
     server_address = ("", port)
-    httpd = HTTPServer(server_address, DailyBriefRequestHandler)
-    print(f"🚀 Daily Brief Server running at http://localhost:{port}")
+    httpd = HTTPServer(server_address, BackendRequestHandler)
+    print(f"🚀 Python Backend API & React UI running at http://localhost:{port}")
     httpd.serve_forever()
 
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8090
-    run_server(port)
+    run_backend_server(port)

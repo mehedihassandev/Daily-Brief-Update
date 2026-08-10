@@ -826,40 +826,40 @@
 
       <div class="form-group">
         <label class="form-label">Slack User / Bot Token</label>
-        <input type="password" id="inputSlack" class="form-control" placeholder="xoxb-... or xoxp-...">
+        <input type="password" id="inputSlack" class="form-control" placeholder="SLACK_BOT_TOKEN (xoxb-...)">
       </div>
 
       <div class="form-group">
         <label class="form-label">Jira Domain</label>
-        <input type="text" id="inputJiraDomain" class="form-control" placeholder="exos-systems.atlassian.net">
+        <input type="text" id="inputJiraDomain" class="form-control" placeholder="JIRA_DOMAIN (yourorg.atlassian.net)">
       </div>
 
       <div class="form-group">
         <label class="form-label">Jira Email</label>
-        <input type="email" id="inputJiraEmail" class="form-control" placeholder="mehedi@swordfishtech.co.uk">
+        <input type="email" id="inputJiraEmail" class="form-control" placeholder="JIRA_EMAIL (you@company.com)">
       </div>
 
       <div class="form-group">
         <label class="form-label">Jira API Token</label>
-        <input type="password" id="inputJiraToken" class="form-control" placeholder="Atlassian API token">
+        <input type="password" id="inputJiraToken" class="form-control" placeholder="JIRA_API_TOKEN">
       </div>
 
       <div class="form-group">
         <label class="form-label">GitHub Personal Access Token (PAT)</label>
-        <input type="password" id="inputGithubToken" class="form-control" placeholder="ghp_...">
+        <input type="password" id="inputGithubToken" class="form-control" placeholder="GITHUB_PAT (ghp_...)">
       </div>
 
       <div class="form-group">
         <label class="form-label">Gemini API Key</label>
-        <input type="password" id="inputGeminiKey" class="form-control" placeholder="AIzaSy...">
+        <input type="password" id="inputGeminiKey" class="form-control" placeholder="GEMINI_API_KEY (AIzaSy...)">
       </div>
 
-      <button class="btn-action btn-sync" style="width:100%; justify-content:center; padding:0.75rem;" onclick="saveSettings()">Save Credentials & Sync</button>
+      <button class="btn-action btn-sync" style="width:100%; justify-content:center; padding:0.75rem;" onclick="saveSettings()">Save Credentials to .env & Sync</button>
     </div>
   </div>
 
   <script>
-    let jiraDomainSetting = "exos-systems.atlassian.net";
+    let jiraDomainSetting = "";
 
     function toggleTodo(cb) {
       cb.closest('.todo-item').classList.toggle('completed', cb.checked);
@@ -875,23 +875,25 @@
     function openModal() { document.getElementById('modalOverlay').classList.add('open'); }
     function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
 
-    // Click handler to open Jira, GitHub, or Slack apps directly!
+    // Dynamic click handler reading exclusively from loaded env setting
     function openTaskApp(ticketId) {
       if (!ticketId) return;
 
-      // Clean up ticket string
       ticketId = ticketId.trim();
 
       // Jira ticket pattern (e.g. EXOS-972, AT-590)
       if (/^[A-Z]+-\d+$/i.test(ticketId)) {
-        const domain = jiraDomainSetting || "exos-systems.atlassian.net";
-        window.open(`https://${domain}/browse/${ticketId}`, '_blank');
+        if (!jiraDomainSetting) {
+          alert('Please set JIRA_DOMAIN in your .env file or Settings modal.');
+          openModal();
+          return;
+        }
+        window.open(`https://${jiraDomainSetting}/browse/${ticketId}`, '_blank');
       }
-      // GitHub Repo / PR (e.g. pos-cws, PR #142)
+      // GitHub Repo / PR
       else if (ticketId.toLowerCase().includes('pr') || ticketId.includes('-')) {
         window.open(`https://github.com/search?q=${encodeURIComponent(ticketId)}`, '_blank');
       }
-      // Fallback search
       else {
         window.open(`https://google.com/search?q=${encodeURIComponent(ticketId)}`, '_blank');
       }
@@ -915,14 +917,14 @@
     }
 
     async function saveSettings() {
-      jiraDomainSetting = document.getElementById('inputJiraDomain').value || "exos-systems.atlassian.net";
+      jiraDomainSetting = document.getElementById('inputJiraDomain').value.trim();
       const payload = {
-        slack_token: document.getElementById('inputSlack').value,
+        slack_token: document.getElementById('inputSlack').value.trim(),
         jira_domain: jiraDomainSetting,
-        jira_email: document.getElementById('inputJiraEmail').value,
-        jira_token: document.getElementById('inputJiraToken').value,
-        github_token: document.getElementById('inputGithubToken').value,
-        gemini_key: document.getElementById('inputGeminiKey').value
+        jira_email: document.getElementById('inputJiraEmail').value.trim(),
+        jira_token: document.getElementById('inputJiraToken').value.trim(),
+        github_token: document.getElementById('inputGithubToken').value.trim(),
+        gemini_key: document.getElementById('inputGeminiKey').value.trim()
       };
 
       await fetch('/api/settings', {
@@ -947,6 +949,9 @@
         if (st.jira_domain) {
           jiraDomainSetting = st.jira_domain;
           document.getElementById('inputJiraDomain').value = st.jira_domain;
+        }
+        if (st.jira_email) {
+          document.getElementById('inputJiraEmail').value = st.jira_email;
         }
       } catch (e) {}
     }
