@@ -721,13 +721,13 @@
           </div>
           <div id="slackDiscussionsList">
             <div class="slack-discussion-item">
-              <a href="slack://open" target="_blank" class="slack-channel-name">#proj-pos-bulk-payment</a>
+              <a href="slack://open" target="_blank" class="slack-channel-name">#proj-pos-bulk-payment ↗</a>
               <div class="slack-discussion-text">
                 Saifur filed EXOS-971 for bulk payment failures; Minhaj confirmed payment service validation patch deployed on pre-prod.
               </div>
             </div>
             <div class="slack-discussion-item">
-              <a href="slack://open" target="_blank" class="slack-channel-name">#mobile-app-ios</a>
+              <a href="slack://open" target="_blank" class="slack-channel-name">#mobile-app-ios ↗</a>
               <div class="slack-discussion-text">
                 Sumiya requested follow-up on AT-590 iOS keyboard padding fix.
               </div>
@@ -831,12 +831,12 @@
 
       <div class="form-group">
         <label class="form-label">Jira Domain</label>
-        <input type="text" id="inputJiraDomain" class="form-control" placeholder="yourorg.atlassian.net">
+        <input type="text" id="inputJiraDomain" class="form-control" placeholder="exos-systems.atlassian.net">
       </div>
 
       <div class="form-group">
         <label class="form-label">Jira Email</label>
-        <input type="email" id="inputJiraEmail" class="form-control" placeholder="user@company.com">
+        <input type="email" id="inputJiraEmail" class="form-control" placeholder="mehedi@swordfishtech.co.uk">
       </div>
 
       <div class="form-group">
@@ -859,7 +859,7 @@
   </div>
 
   <script>
-    let jiraDomainSetting = "";
+    let jiraDomainSetting = "exos-systems.atlassian.net";
 
     function toggleTodo(cb) {
       cb.closest('.todo-item').classList.toggle('completed', cb.checked);
@@ -879,9 +879,12 @@
     function openTaskApp(ticketId) {
       if (!ticketId) return;
 
+      // Clean up ticket string
+      ticketId = ticketId.trim();
+
       // Jira ticket pattern (e.g. EXOS-972, AT-590)
       if (/^[A-Z]+-\d+$/i.test(ticketId)) {
-        const domain = jiraDomainSetting || "yourorg.atlassian.net";
+        const domain = jiraDomainSetting || "exos-systems.atlassian.net";
         window.open(`https://${domain}/browse/${ticketId}`, '_blank');
       }
       // GitHub Repo / PR (e.g. pos-cws, PR #142)
@@ -912,7 +915,7 @@
     }
 
     async function saveSettings() {
-      jiraDomainSetting = document.getElementById('inputJiraDomain').value;
+      jiraDomainSetting = document.getElementById('inputJiraDomain').value || "exos-systems.atlassian.net";
       const payload = {
         slack_token: document.getElementById('inputSlack').value,
         jira_domain: jiraDomainSetting,
@@ -941,6 +944,10 @@
         document.getElementById('dotJira').className = st.jira ? 'dot-green' : 'dot-gray';
         document.getElementById('dotGithub').className = st.github ? 'dot-green' : 'dot-gray';
         document.getElementById('dotGemini').className = st.gemini ? 'dot-green' : 'dot-gray';
+        if (st.jira_domain) {
+          jiraDomainSetting = st.jira_domain;
+          document.getElementById('inputJiraDomain').value = st.jira_domain;
+        }
       } catch (e) {}
     }
 

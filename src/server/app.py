@@ -1,9 +1,9 @@
 """
-HTTP API Server for Wise Daily Brief Project
+HTTP API Server for Daily Brief Project
 
 Serves the Web Dashboard UI and REST API endpoints:
 - GET /               -> Web Dashboard UI
-- GET /api/status     -> Check integration connection states
+- GET /api/status     -> Check integration connection states & domain config
 - POST /api/brief     -> Generate Daily Brief with Gemini
 - POST /api/settings   -> Save API keys/tokens
 """
@@ -40,7 +40,7 @@ load_env_file()
 # In-Memory Configuration Store
 APP_CONFIG = {
     "slack_token": os.environ.get("SLACK_BOT_TOKEN", ""),
-    "jira_domain": os.environ.get("JIRA_DOMAIN", ""),
+    "jira_domain": os.environ.get("JIRA_DOMAIN", "exos-systems.atlassian.net"),
     "jira_email": os.environ.get("JIRA_EMAIL", ""),
     "jira_token": os.environ.get("JIRA_API_TOKEN", ""),
     "github_token": os.environ.get("GITHUB_PAT", ""),
@@ -48,7 +48,7 @@ APP_CONFIG = {
 }
 
 
-class WiseBriefRequestHandler(BaseHTTPRequestHandler):
+class DailyBriefRequestHandler(BaseHTTPRequestHandler):
     def _set_headers(self, status=200, content_type="application/json"):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -80,7 +80,8 @@ class WiseBriefRequestHandler(BaseHTTPRequestHandler):
                 "slack": bool(APP_CONFIG["slack_token"]),
                 "jira": bool(APP_CONFIG["jira_domain"] and APP_CONFIG["jira_token"]),
                 "github": bool(APP_CONFIG["github_token"]),
-                "gemini": bool(APP_CONFIG["gemini_key"])
+                "gemini": bool(APP_CONFIG["gemini_key"]),
+                "jira_domain": APP_CONFIG["jira_domain"] or "exos-systems.atlassian.net"
             }
             self._set_headers(200)
             self.wfile.write(json.dumps(status).encode("utf-8"))
@@ -149,8 +150,8 @@ class WiseBriefRequestHandler(BaseHTTPRequestHandler):
 
 def run_server(port=8090):
     server_address = ("", port)
-    httpd = HTTPServer(server_address, WiseBriefRequestHandler)
-    print(f"🚀 Wise Daily Brief Server running at http://localhost:{port}")
+    httpd = HTTPServer(server_address, DailyBriefRequestHandler)
+    print(f"🚀 Daily Brief Server running at http://localhost:{port}")
     httpd.serve_forever()
 
 
